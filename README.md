@@ -5,7 +5,7 @@ MIDI Router -
 <BR>
 SETUP<BR>
 -- host this on some webserver<BR>
--- enable SSL and provide a certificate; WEBMIDI requires SSL.  It still works if you bypass the broswer warnings (not recommended)<BR>
+-- enable SSL and provide a certificate; WEBMIDI requires SSL.  It still works if you bypass the browser warnings (not recommended)<BR>
 <BR>
 USAGE<BR>
 -- Example: I use this with MIDIPLUS 8x8 MIDI box which provides no means of mapping ports/channels<BR>
