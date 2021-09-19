@@ -30,6 +30,7 @@ C) USING A PREVIOUS MAP<BR>
 <BR>
 D) REFRESHING A MAP THAT YOU HAVE CHANGED<BR>
 -- click the book mark again or click the "Load template from URI" button<BR>
+-- rarely have I actually used this button, will probably delete it in the future <BR>
 <BR>
 E) STARTING THE ROUTER/STOPPING THE ROUTER<BR>
 -- the router is either on or off, use the "Router Status" button to start/stop the router<BR>
