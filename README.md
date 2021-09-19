@@ -16,7 +16,7 @@ A) SETTING UP THE MAP<BR>
 -- per the image, 8 input ports, 8 output ports -- this is because my hardware configuration has an 8x8 MIDI USB device <BR>
 -- whatever MIDI devices that you have will show up <BR>
 -- assign each input port to an output port<BR>
--- assign the Input Channels **[any, none, all] to filter channel mesages** that will be sent to the Output Channel<BR>
+-- assign the Input Channels **[channel#, any, none, all] to filter channel mesages** that will be sent to the Output Channel<BR>
 -- assign the ouput channels<BR>
 -- Give each map row a Humane Name so that you do not have to remember which device is using what port/channel combination<BR>
 <BR>
