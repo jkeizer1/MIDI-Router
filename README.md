@@ -1,7 +1,7 @@
 # MIDI-Router
 MIDI Router -
   ![image](https://user-images.githubusercontent.com/17629970/133940938-1160de31-6f55-4634-9de7-f984f7d90cb2.png)
-  This software enables MIDI Channel/Port mapping.  You can bookmark several configurations (maps) in your WebMIDI capable browser and quickly start making music versus fussing in your DAW.  My use case is to provide software for aMIDIPLUS 8x8 USB Midi Box.
+  This software enables MIDI Channel/Port mapping.  You can bookmark several configurations (maps) in your WebMIDI capable browser and quickly start making music versus fussing in your DAW.  My use case is to provide software for a **MIDIPLUS 8x8 USB Midi Box**. <BR>
 <BR>
 SETUP<BR>
 -- host this on some webserver<BR>
@@ -9,13 +9,14 @@ SETUP<BR>
 <BR>
 USAGE<BR>
 -- Example: I use this with MIDIPLUS 8x8 MIDI box which provides no means of mapping ports/channels<BR>
--- Most people would just use their DAW; I find it faster/simpler to just open my browser and click a book mark vs managing MIDI in my DAW
+-- Most people would just use their DAW; I find it faster/simpler to just open my browser and click a book mark vs managing MIDI in my DAW <BR>
 <BR>
 A) SETTING UP THE MAP<BR>
--- per the image, 8 input ports, 8 output ports<BR>
+-- per the image, 8 input ports, 8 output ports -- this is because my hardware configuration has an 8x8 MIDI USB device <BR>
+-- whatever MIDI devices that you have will show up <BR>
 -- assign each input port to an output port<BR>
--- assign Input Channel [any, none, all] to filter channel mesages that will be sent to the Output Channel<BR>
--- assign the ouput channel<BR>
+-- assign the Input Channels **[any, none, all] to filter channel mesages** that will be sent to the Output Channel<BR>
+-- assign the ouput channels<BR>
 -- Give each map row a Humane Name so that you do not have to remember which device is using what port/channel combination<BR>
 <BR>
 B) SAVING THE MAP<BR>
@@ -32,7 +33,7 @@ E) STARTING THE ROUTER/STOPPING THE ROUTER<BR>
 -- the router is either on or off, use the "Router Status" button to start/stop the router<BR>
 <BR>
 F) REAL TIME START MESSAGES<BR>
--- this feature disables/enables sending of the MIDI Real Time Start Messages<BR>
+-- this feature disables/enables sending MIDI Real Time Start Messages<BR>
 -- if enabled, your devices may start their own sequencers; this button allows you to disable this behaviour<BR>
 -- for example, prevent a set of Volcas from always starting their sequencers<BR>
 <BR>
