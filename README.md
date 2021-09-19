@@ -34,6 +34,7 @@ D) REFRESHING A MAP THAT YOU HAVE CHANGED<BR>
 <BR>
 E) STARTING THE ROUTER/STOPPING THE ROUTER<BR>
 -- the router is either on or off, use the "Router Status" button to start/stop the router<BR>
+-- all notes off messages are sent to all the devices when the router is stopped<BR>
 <BR>
 F) REAL TIME START MESSAGES<BR>
 -- this feature disables/enables sending MIDI Real Time Start Messages<BR>
