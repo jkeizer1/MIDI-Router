@@ -17,7 +17,7 @@ A) SETTING UP THE MAP<BR>
 -- per the image, 8 input ports, 8 output ports -- this is because my hardware configuration has an 8x8 MIDI USB device <BR>
 -- whatever MIDI devices that you have will show up <BR>
 -- assign each input port to an output port<BR>
--- assign the Input Channels **[channel#, any, none, all] to filter channel mesages** that will be sent to the Output Channel<BR>
+-- assign the Input Channels **[channel#, any, none] to filter channel mesages** that will be sent to the Output Channel<BR>
 -- assign the ouput channels<BR>
 -- Give each map row a Humane Name so that you do not have to remember which device is using what port/channel combination<BR>
 <BR>
@@ -53,7 +53,7 @@ https://www.w3.org/TR/webmidi/#idl-def-MIDIPort <BR>
 <BR>
 I) SECURITY<BR>
 -- Per (G), this is a home project.  Other than enabling SSL, I have NOT considered security aspects, for example effects of people hacking the URI string<BR>
--- Decide for yourself if this seems insecure and improve it if you need to; I make no representation that he code / solution is secure in any way; use at your own risk<BR>
+-- Decide for yourself if this seems insecure and improve it if you need to; I make no representation that the code / solution is secure in any way; use at your own risk<BR>
 <BR>
 J) LIVE PERFORMANCES<BR>
 -- I use this only to create music for hobby purposes; so far it has worked really well.  But I am not certain I would use this in front of an audience live; probably the biggest issue might be stuck notes; I have not encountered this issue too frequently and have not included a all notes off button although it does send notes off messages (0x7B) everywhere when the router stop button is pressed <BR>
