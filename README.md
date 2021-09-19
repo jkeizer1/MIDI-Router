@@ -53,5 +53,5 @@ I) SECURITY<BR>
 -- Decide for yourself if this seems insecure and improve it if you need to; I make no representation that he code / solution is secure in any way; use at your own risk<BR>
 <BR>
 J) LIVE PERFORMANCES<BR>
--- I use this only to create music for hobby purposes; so far it has worked really well.  But I am not certain I would use this in front of an audience live; probably the biggest issue might be stuck notes; I have not encountered this issue too frequently and have not included a all notes off button although it does notes off messages everywhere when the router is stopped   <BR>
+-- I use this only to create music for hobby purposes; so far it has worked really well.  But I am not certain I would use this in front of an audience live; probably the biggest issue might be stuck notes; I have not encountered this issue too frequently and have not included a all notes off button although it does send notes off messages (0x7B) everywhere when the router is stopped <BR>
 END<BR>
