@@ -1,0 +1,547 @@
+<!DOCTYPE html>   
+<head>
+<style>
+.button1 {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  padding: 15px 25px;
+  text-align: center;
+  font-size: 14px;
+  width: 23%;
+  float: center-left;
+  cursor: pointer; 
+  opacity: 1;
+  border-radius: 8px;
+  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+}
+.button1:hover {
+  background-color: blue;
+  opacity: .3;
+}
+.button2:hover {
+  background-color: blue;
+  opacity: .3;
+}
+.button2 {
+  background-color: #4C50AF;
+  border: none;
+  color: white;
+  padding: 15px 25px;
+  text-align: center;
+  font-size: 14px;
+  width: 23%;
+  float: center-right; 
+  cursor: pointer; 
+  opacity: 1;
+  border-radius: 8px;
+  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+</style>
+
+</head>
+<body>
+
+<header>
+<h2>MIDI Router v0.07</h2>
+<h3>by Jim Keizer</h3>
+<p id="CheckBrowserMidi"><b>Browser WebMidi Support: Check Pending</b></p><br>
+
+<button id="routerSwitchButton" class="button1" onclick="routerOnOff()">Router Status - OFF</button>
+<button id="toggleStartButton" class="button1" onclick="toggle_realtime_start()">Toggle Real Time Start Messages (current: off)</button>
+<div style="clear:both;"></>
+<br>
+<button id="saveButton" class="button2" onclick="saveButton()">Save URI to clipboard</button>
+<button id="loadButton" class="button2" onclick="load_template_and_render()">Load template from URI</button>
+
+<div style="clear:both;"></>
+<br><br><br>
+</header>
+
+<section>
+<!--
+<table id="inputPortsTable" style="width:25%; float:left">
+	<tr>
+		<th>Input Port</th>
+		<th>WebMIDI Port ID</th>
+		<th>Input Channel</th>
+	</tr>
+</table>
+-->
+<table id="outputPortsTable" style="width:100%; float:left">
+	<tr>
+		<th>Input Port Mapped to Output</th>
+		<th>Input Channel Filter</th>
+		<th>Output Port</th>
+		<th>Humane Name</th>
+		<th>WebMIDI Port ID</th>
+		<th>Output Channel</th>
+	</tr>
+</table>
+</section>
+
+<div style="clear: both;"></div>
+
+<br><br><br>
+<p id="Messages">Channel Message Count: 0: </p>
+</div>
+
+<script>
+// Info about MIDI Commands:	
+// https://www.cs.cmu.edu/~music/cmsip/readings/MIDI%20tutorial%20for%20programmers.html
+//https://www.songstuff.com/recording/article/midi_message_format/
+
+var globalMidi = null;
+var inputs = null;
+var outputs = null;
+var toggleStart = "off";   // Message FA or 111 1010 Real Time Start Message
+var all_notes_off = false;
+
+const router_states = {
+	PROCESSING: 'ProcessingMessages', 
+	OFF: 'Off'
+};
+var routerState = router_states.OFF;
+ 
+var portselectionsMade = false;
+
+var messageCounter = 0;
+
+// Initialize MIDI after checking browser support. Note SSL is required.	
+if (navigator.requestMIDIAccess) {
+    document.getElementById("CheckBrowserMidi").innerHTML = "Browser WebMidi Support: Confirmed";
+    navigator.requestMIDIAccess({ sysex: true })
+        .then(onMIDISuccess, onMIDIFailure);
+}
+else {
+	globalMidi = null;
+	document.getElementById("CheckBrowserMidi").innerHTML = "Browser WebMidi Support: No Support";
+}
+
+
+function render_UI_MidiMap (template) {	
+	var ui_table = document.getElementById('outputPortsTable').getElementsByTagName('tbody')[0] 
+	var row = 1;
+	// structure of template row
+	/*
+	input_port,input_channel,output_port,output_port_friendly,output_device_id,output_channel
+	*/
+	var template_row;
+
+	function clear_html() {
+		var table = document.getElementById("outputPortsTable");
+		for (var i = table.rows.length- 1; i > 0; i--) {  // start from 1, skip the header row 0
+		  document.getElementById("outputPortsTable").deleteRow(i)
+		}
+	}
+	   
+	clear_html();
+	
+	outputs.forEach( function( key, port ) {
+		
+		function check_output_port(port_name, template_rows) {
+			for  (var i = 0; i < template_rows.length; i++) {
+			    line = template_rows[i];
+			    if (port_name === line.output_port) {
+					return (line);
+				}
+			}
+			return (null);
+		}
+		
+		function select_option (newCell, search) {
+			var found = false;
+			for (var i = 0; (i < newCell_select.options.length) && (!found); i++) {
+				if (newCell_select.options[i].value === search) {
+					newCell_select.selectedIndex = i;
+					found = true;
+				}
+			}
+		}
+		
+		if (template) template_row = check_output_port(key.name,template.uriParms);
+		
+		var newRow = ui_table.insertRow(row);
+	
+	    // Input Port
+		var newCell = newRow.insertCell(0);
+		var newCell_select = document.createElement('select');
+		var option = document.createElement('option');
+		option.value = "not mapped";
+		option.text =  "not mapped";
+		newCell_select.appendChild(option);
+
+		inputs.forEach (function( key, port ) {
+			var option = document.createElement('option');
+			option.value = key.name;
+			option.text = key.name;
+			newCell_select.appendChild(option);
+		});
+		if (template_row)
+			select_option (newCell, template_row.input_port);
+		newCell.appendChild(newCell_select);	
+		
+		// Input Channel
+		newCell = newRow.insertCell(1);
+		newCell_select = document.createElement('select');
+		var option = document.createElement('option');
+		option.value = "none";
+		option.text = "none";
+		newCell_select.appendChild(option);
+		var option = document.createElement('option');
+		option.value = "any";
+		option.text = "any";
+		newCell_select.appendChild(option);
+
+		for (var channel = 0; channel < 16; channel++) {
+			var option = document.createElement('option');
+			option.value = channel;
+			option.text = channel + 1;
+			newCell_select.appendChild(option);
+		}
+		if (template_row)
+			select_option (newCell, template_row.input_channel);
+		
+		// Port Name
+		newCell.appendChild(newCell_select);
+		var newCell = newRow.insertCell(2);
+		var newCell_text = document.createTextNode(key.name);
+		newCell.appendChild(newCell_text);
+		
+		// Port Friendly Name
+		newCell = newRow.insertCell(3)
+		var newCell = newRow.insertCell(3);
+		var newCell_input = document.createElement("INPUT");
+		newCell_input.setAttribute("type", "text");
+		if (template_row)
+			newCell_input.value = template_row.output_port_friendly;
+		newCell.appendChild(newCell_input);
+		
+		// WebMIDI Port ID
+		newCell = newRow.insertCell(4);
+		newCell_text = document.createTextNode(port);
+		newCell.appendChild(newCell_text);
+		
+		// Output Channel
+		newCell = newRow.insertCell(5);
+		newCell_select = document.createElement('select');
+		var option = document.createElement('option');
+		option.value = "none";
+		option.text = "none";
+		newCell_select.appendChild(option);
+		for (var channel = 0; channel < 16; channel++) {
+			var option = document.createElement('option');
+			option.value = channel;
+			option.text = channel + 1;
+			newCell_select.appendChild(option);
+		}
+		if (template_row)
+			select_option (newCell, template_row.output_channel);
+		newCell.appendChild(newCell_select);
+		
+		row += 1;	
+	  
+    });
+
+}
+
+
+function toggle_realtime_start() {
+	if (toggleStart == "off")
+		toggleStart = "on";
+	else
+		toggleStart  = "off";
+	document.getElementById("toggleStartButton").innerHTML = "Toggle Real Time Start Messages (current: " + toggleStart + ")";
+}
+
+function routerOnOff () {
+	if ((routerState == router_states.OFF) && (globalMidi != null)) {
+		routerState = router_states.PROCESSING;
+		document.getElementById("routerSwitchButton").innerHTML = "Router Status - Running";
+	}
+	else {
+		routerState = router_states.OFF;
+		document.getElementById("routerSwitchButton").innerHTML = "Router Status - OFF";
+		all_notes_off = true;
+	}
+}
+
+function copyStringToClipboard (str) {
+   // Create new element
+   var el = document.createElement('textarea');
+   // Set value (string to be copied)
+   el.value = str;
+   // Set non-editable to avoid focus and move outside of view
+   el.setAttribute('readonly', '');
+   el.style = {position: 'absolute', left: '-9999px'};
+   document.body.appendChild(el);
+   // Select text inside element
+   el.select();
+   // Copy text to clipboard
+   document.execCommand('copy');
+   // Remove temporary element
+   document.body.removeChild(el);
+}
+
+function saveButton() {
+	var table = document.getElementById("outputPortsTable");
+	var obj = {
+		uriParms : []
+	}
+	var uriText = "https://jkz.asuscomm.com/midirouter6.html?"
+	for (var i = 1; i < table.rows.length; i++) {  // start from 1, skip the header row 0
+		row = table.rows[i];
+		var input_port = row.cells[0].childNodes[0].value;   // selected input port name
+		var input_channel = row.cells[1].childNodes[0].value;
+		var output_port = row.cells[2].innerText;
+		var output_port_friendly = row.cells[3].childNodes[0].value;
+		var output_device_id = row.cells[4].innerText;
+		var output_channel = row.cells[5].childNodes[0].value;  // selected input channel name
+		
+		obj.uriParms.push({input_port,input_channel,output_port,output_port_friendly,output_device_id,output_channel});
+
+	}
+	var objstring = encodeURIComponent(JSON.stringify(obj));
+	uriText = uriText + "Parm1="+objstring;
+	//console.log (uriText,"===============",objstring);
+	copyStringToClipboard (uriText);
+}
+
+function load_template_and_render() {
+	var urlVars = getUrlVars();
+	if (urlVars.Parm1 != undefined) {
+		var decoded_uriParms = decodeURIComponent(urlVars.Parm1);
+		var justParms = decoded_uriParms.slice(decoded_uriParms.indexOf("?")+1);
+		var template = JSON.parse(justParms);
+		console.log ("Load Button: ", template);
+		// updateTable(obj);
+		render_UI_MidiMap (template);
+	} else {
+		render_UI_MidiMap (null);
+	}
+}
+
+// example: var xy = getUrlVars()["xy"];     https://site/?xy=abce
+function getUrlVars() {
+    var vars = {};
+	// can use encodeURI and decodeURI 
+    var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+        vars[key] = value;
+    });
+    return vars;
+}
+
+// extract output device id from <select> list options which contain the full name:device-id as a string
+function getOutputDevices (input, all) {
+	var outputs  = [];
+	var table = document.getElementById("outputPortsTable");
+	for (var i = 1; i < table.rows.length; i++) {  // start from 1, skip the header row 0
+		var row = table.rows[i];
+		var map_input_port = row.cells[0].childNodes[0].value;   // selected input port name
+		var map_input_channel = row.cells[1].childNodes[0].value
+//		var map_device_friendly = row.cells[3].childNodes[0].value;
+		var map_output_device_id = row.cells[4].innerText;
+		var map_output_channel = row.cells[5].childNodes[0].value;  // selected input channel name
+		
+		if (all) {  // this handles non-channel specific messages
+			outputs.push ({map_output_device_id, map_input_channel, map_output_channel});
+		}
+		else {
+			if (map_input_port.localeCompare(input) == 0) {  // match input Port to the port that triggered getMIDIMessage 
+				if (map_input_channel != "none")  { // don't add to output table if filtered by "none"
+					outputs.push ({map_output_device_id, map_input_channel, map_output_channel});  // i-1 is the index in the outputs array corresponds to the HTML table
+				}
+			}
+		}
+	}
+	
+	return outputs;
+}
+
+
+function getMIDIMessage(message, input_obj) {  // "message" is a MIDIMessageEvent
+
+	var command = message.data[0];
+	var channel = command % 16;
+	var code = command - channel;
+	
+	/*
+	80h 00h = 8 bits through E0h 00h are channel specific messages
+		80nnnn - Note Off
+		90nnnn - Note On
+		A0nnnn - Polyphonic Aftertouch
+		B0nnnn - Control Change
+		C0nnnn - Program Change
+		D0nnnn - Channel Aftertouch
+		E0nnnn - Pitch Wheel 
+		nnnn   - Channel 0..15 (human 1 to 16)
+	
+		F0     - System Exclusive Start 
+		F7	   - System Exclusive End
+		An     - System Exclsive Poly Aftertouch (?)
+		
+		F1     - MIDI Time Code (Quarter Frame)
+		F2, F3, F6 - System Common
+		
+		F8 - FF - System Realtime
+	*/
+	
+	if (all_notes_off == true) {
+		var output = getOutputDevices(input_obj);
+		for (i = 0; i < output.length; i++) {
+			var thisoutput = outputs.get(output[i].map_output_device_id);
+			var alt_message = message;
+			message.data = 0x7B;
+			thisoutput.send (message.data);
+		}
+		all_notes_off = false;
+	}
+					
+		
+	if (routerState == router_states.PROCESSING) {
+		
+		//console.log ("Command & Message Length: " + command + ", " + message.data.length);
+		
+		if ((command >= 0x80) && (command <= (0xE0+15))) {
+			
+			messageCounter += 1;
+			document.getElementById("Messages").innerHTML = "Channel Message Count: " + messageCounter;		
+					
+			var input_device  = message.target.id; // example contains input-0	 // NOT USED --- YET				
+			var output = getOutputDevices(input_obj);
+			
+			//console.log (output);
+			
+			for (i = 0; i < output.length; i++) {
+				
+				
+				if ((output[i].map_input_channel == "any") || (Number(output[i].map_input_channel) == channel)) {
+					
+					var thisoutput = outputs.get(output[i].map_output_device_id,false);
+					
+					if (output[i].map_output_channel != "none") {
+				
+						switch (code) {
+							case 0x80: // note off
+							case 0x90: // note on
+							case 0xA0: // Polyphonic Aftertouch
+							case 0xB0: // Control Change
+							case 0xC0: // Program Change						
+							case 0xD0: // Channel Aftertouch						
+							case 0xE0: // pitch wheel
+								var newMessage;
+								//message.data[0] = message.data[0] - channel + Number(output[i].map_output_channel);
+								switch (message.data.length) {
+									case 1:
+										newMessage  = [code + Number(output[i].map_output_channel)];
+										break;
+									case 2:
+										newMessage  = [code + Number(output[i].map_output_channel), message.data[1]];
+										break;
+									case 3:
+										newMessage  = [code + Number(output[i].map_output_channel), message.data[1], message.data[2]];
+										break;								
+									break;
+								}
+								/*
+								if (channel != Number(output[i].map_output_channel)) {
+									console.log ("Changed input channel to output channel from: " + channel + " to: " + Number(output[i].map_output_channel) + " DeviceID: " +
+									output[i].map_output_device_id);
+								}
+								else {
+									console.log ("Input channel to output channel: " + channel + " to: " + Number(output[i].map_output_channel) + " DeviceID: " +
+									output[i].map_output_device_id );
+								}
+								*/
+								//console.log ("Status: " + newMessage[0] + "  Data 1: " + newMessage[1] + " Data 2: " + newMessage[2]);
+								thisoutput.send (newMessage);
+								//console.log ("sent: " + message.data[0]);
+							break;
+						}
+					}
+				}
+			}
+		}
+		else { /* Handle All non-Channel Specific Message */
+			if (toggleStart == "on") {   // filter real time start sequences (avoids all sequencers from being triggered 
+				var output = getOutputDevices(input_obj);
+				for (i = 0; i < output.length; i++) {
+					var thisoutput = outputs.get(output[i].map_output_device_id);
+					thisoutput.send (message.data);
+				}
+			}
+		}			
+	}
+}
+
+// midi functions
+function onMIDISuccess(midiAccess) {
+    
+	globalMidi = midiAccess;
+	
+	console.log('Global MIDI Access Object', globalMidi);
+	
+    console.log('MIDI Access Object', midiAccess);
+
+    inputs = midiAccess.inputs;
+    outputs = midiAccess.outputs;
+	
+	// Important: key is a MIDIPort interface (WebIDL) -- see: https://www.w3.org/TR/webmidi/#idl-def-MIDIPort
+	/*
+	interface MIDIPort : EventTarget {
+		readonly    attribute DOMString               id;
+		readonly    attribute DOMString?              manufacturer;
+		readonly    attribute DOMString?              name;
+		readonly    attribute MIDIPortType            type;
+		readonly    attribute DOMString?              version;
+		readonly    attribute MIDIPortDeviceState     state;
+		readonly    attribute MIDIPortConnectionState connection;
+					attribute EventHandler            onstatechange;
+		Promise<MIDIPort> open ();
+		Promise<MIDIPort> close ();
+	};
+	*/
+	
+	/*
+	inputs.forEach( function( key, port ) {
+	  key.open();
+    });
+
+	outputs.forEach( function( key, port ) {
+	  key.open();
+    });
+	*/
+
+	for  (var input of midiAccess.inputs.values()) {
+		let obj = {
+				name: input.name,
+				fn: function fn (a) {
+					return getMIDIMessage(a, this.name);
+				}
+		}
+		input.onmidimessage = obj.fn;
+	}
+	
+	load_template_and_render();
+	
+}
+
+function onMIDIFailure(e) {
+    // when we get a failed response, run this code
+    console.log("No access to MIDI devices or your browser doesn't support WebMIDI API. Please use WebMIDIAPIShim " + e);
+}
+
+
+</script>
+
+</body>
+</html>
