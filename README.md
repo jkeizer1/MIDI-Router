@@ -1,7 +1,7 @@
 # MIDI-Router
 MIDI Router -
   ![image](https://user-images.githubusercontent.com/17629970/133940938-1160de31-6f55-4634-9de7-f984f7d90cb2.png)
-  This software enables MIDI Channel/Port mapping.  You can bookmark several configurations (maps) in your WebMIDI capable browser and quickly start making music versus fussing in your DAW.  My use case is to provide software for a **MIDIPLUS 8x8 USB Midi Box**. <BR>
+  This software enables MIDI Channel/Port mapping in a Web Browser.  You can bookmark several configurations (maps) in your WebMIDI capable browser and quickly start making music versus fussing in your DAW.  My use case is to provide software for a **MIDIPLUS 8x8 USB Midi Box**. <BR>
 <BR>
 SETUP<BR>
 -- host this on some webserver<BR>
