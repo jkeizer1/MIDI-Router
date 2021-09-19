@@ -45,6 +45,7 @@ G) CODE NOTES<BR>
 H) SOME MIDI BACKGROUND<BR>	
 https://www.cs.cmu.edu/~music/cmsip/readings/MIDI%20tutorial%20for%20programmers.html <BR>
 https://www.songstuff.com/recording/article/midi_message_format/ <BR>
+https://www.w3.org/TR/webmidi/#idl-def-MIDIPort <BR>
 <BR>
 I) SECURITY<BR>
 -- Per (G), this is a home project.  Other than enabling SSL, I have NOT considered security aspects, for example effects of people hacking the URI string<BR>
