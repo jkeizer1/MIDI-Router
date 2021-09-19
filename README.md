@@ -24,7 +24,7 @@ B) SAVING THE MAP<BR>
 -- paste this into your browser, and save a bookmark<BR>
 <BR>
 C) USING A PREVIOUS MAP<BR>
--- click the bookmar; the program will load the table from the URI parameters<BR>
+-- click the bookmark; the program will load the table from the URI parameters<BR>
 <BR>
 D) REFRESHING A MAP THAT YOU HAVE CHANGED<BR>
 -- click the book mark again or click the "Load template from URI" button<BR>
@@ -39,7 +39,7 @@ F) REAL TIME START MESSAGES<BR>
 <BR>
 G) CODE NOTES<BR>
 -- this is a home project, and has not been hardened for Security at all<BR> 
--- the javascript is probably not up to best practices as it was only my second or third'ish script, could easily be improved and cleaned up in several ways; maybe later :)<BR>
+-- the javascript is probably not up to best practices as it was only my second or third'ish java script, it could easily be improved and cleaned up in several obvious ways; maybe later :)<BR>
 -- this is my first WebMIDI project; use at own risk. The script has worked for my purposes; your milage may vary<BR>
 <BR>
 H) SOME MIDI BACKGROUND<BR>	
