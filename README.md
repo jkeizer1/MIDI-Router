@@ -6,6 +6,7 @@ MIDI Router -
 SETUP<BR>
 -- host this on some webserver<BR>
 -- enable SSL and provide a certificate; WEBMIDI requires SSL.  It still works if you bypass the browser warnings (not recommended)<BR>
+-- update the script with your hostname and script version: var uriText = "https://yourhost/midirouter7_public.html?"
 <BR>
 USAGE<BR>
 -- Example: I use this with MIDIPLUS 8x8 MIDI box which provides no means of mapping ports/channels<BR>
