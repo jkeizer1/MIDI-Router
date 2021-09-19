@@ -21,7 +21,7 @@ A) SETTING UP THE MAP<BR>
 -- Give each map row a Humane Name so that you do not have to remember which device is using what port/channel combination<BR>
 <BR>
 B) SAVING THE MAP<BR>
--- press the "SAVE URI to clipboard" button (this simply creates a URI string with the parameters of the map table set)<BR>
+-- press the "SAVE URI to clipboard" button (this simply creates a URI string with the parameters of the map table set, and copies it to the clipboard)<BR>
 -- paste this into your browser, and save a bookmark<BR>
 <BR>
 C) USING A PREVIOUS MAP<BR>
