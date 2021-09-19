@@ -4,7 +4,7 @@ MIDI Router -
   This software enables MIDI Channel/Port mapping in a Web Browser.  You can bookmark several configurations (maps) in your WebMIDI capable browser and quickly start making music versus fussing in your DAW.  My use case is to provide software for a **MIDIPLUS 8x8 USB Midi Box**. <BR>
 <BR>
 SETUP<BR>
--- serve the midi router HTML file on some webserver<BR>
+-- host the midi router HTML file on some webserver<BR>
 -- enable SSL and provide a certificate; WEBMIDI requires SSL.  It still works if you bypass the browser warnings (not recommended)<BR>
 -- update the script with your hostname and script version: var uriText = "https://yourhost/midirouter7_public.html?" <BR>
 <BR>
