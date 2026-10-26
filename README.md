@@ -1,6 +1,6 @@
 # MIDI-Router
 
-![image](https://user-images.githubusercontent.com/17629970/133940938-1160de31-6f55-4634-9de7-f984f7d90cb2.png)
+![MIDI Router v1.0](screenshot.png)
 
 A MIDI port/channel router that runs in a web browser (Web MIDI). Bookmark several maps and switch between them in a click instead of fussing in a DAW. Written for a **MIDIPLUS 8x8 USB MIDI box**, which has no routing of its own. One HTML file, no libraries.
 
