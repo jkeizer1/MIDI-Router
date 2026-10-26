@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIDI Router v1.0</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #202124;
+  --fg: #d4d4d4;
+  --muted: #8f9296;
+  --line: #3a3b3e;
+  --field-bg: #2b2c2f;
+  --field-fg: #d4d4d4;
+  --field-border: #4a4c50;
+  --btn-fg: #e6e6e6;
+  --run: #2f6b34;
+  --off: #4a4c50;
+  --action: #3b4a8a;
+  --panic: #8e2424;
+  --warn-bg: #3a3020;
+  --warn-fg: #e0c088;
+  --err-bg: #3a1f1f;
+  --err-fg: #f0a0a0;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  font-size: 16px;
+  margin: 16px;
+}
+select, input[type="text"], #errorBox button {
+  background: var(--field-bg);
+  color: var(--field-fg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+select:focus, input[type="text"]:focus { outline: 1px solid var(--muted); }
+h1 { font-size: 1.6em; margin: 0; }
+.byline { color: var(--muted); margin: 0 0 12px 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.controls button {
+  border: none;
+  color: var(--btn-fg);
+  padding: 14px 22px;
+  font-size: 16px;
+  min-width: 220px;
+  cursor: pointer;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.controls button:hover { filter: brightness(1.15); }
+.controls button:disabled { cursor: not-allowed; opacity: 0.5; }
+.btn-off { background: var(--off); }
+.btn-run { background: var(--run); }
+.btn-action { background: var(--action); }
+.btn-panic { background: var(--panic); }
+#midiStatus { font-weight: bold; }
+#notice { min-height: 1.4em; }
+#linkBox { width: 100%; font-family: monospace; font-size: 13px; }
+.warn { background: var(--warn-bg); color: var(--warn-fg); padding: 8px 12px; border-radius: 6px; }
+#errorBox { background: var(--err-bg); color: var(--err-fg); padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
+#errorBox pre { white-space: pre-wrap; font-size: 12px; margin: 4px 0 10px 0; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--line); }
+td select, td input { font-size: 15px; }
+tr.missing td { color: var(--warn-fg); }
+.port-id { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MIDI Router v1.0</h1>
+  <p class="byline">by Jim Keizer</p>
+  <p id="midiStatus">MIDI: checking…</p>
+
+  <div class="controls">
+    <button id="routerButton" class="btn-off" type="button" disabled>Router: OFF — click to start</button>
+    <button id="systemButton" class="btn-off" type="button">System msgs (clock, start/stop, SysEx): BLOCKED</button>
+    <button id="panicButton" class="btn-panic" type="button" disabled>PANIC — all notes off</button>
+  </div>
+  <div class="controls">
+    <button id="saveButton" class="btn-action" type="button" disabled>Save map as link</button>
+    <button id="reloadButton" class="btn-action" type="button" disabled>Reload map from link</button>
+  </div>
+  <p id="notice"></p>
+  <div id="linkArea" hidden>
+    <label for="linkBox">Map link (bookmark this):</label>
+    <input id="linkBox" name="linkBox" type="text" readonly>
+  </div>
+  <p id="missingPorts" class="warn" hidden></p>
+</header>
+
+<section id="errorBox" hidden>
+  <strong>Problems</strong>
+  <button id="clearErrorsButton" type="button">Clear</button>
+  <ol id="errorList"></ol>
+</section>
+
+<section>
+  <table id="routeTable">
+    <thead>
+      <tr>
+        <th>Input Port Mapped to Output</th>
+        <th>Input Channel Filter</th>
+        <th>Output Port</th>
+        <th>Humane Name</th>
+        <th>WebMIDI Port ID</th>
+        <th>Output Channel</th>
+      </tr>
+    </thead>
+    <tbody id="routeTableBody"></tbody>
+  </table>
+</section>
+
+<p id="counter">Channel messages: 0</p>
+
+<script>
+// @ts-check
+"use strict";
+
+// MIDI references:
+// https://www.cs.cmu.edu/~music/cmsip/readings/MIDI%20tutorial%20for%20programmers.html
+// https://www.w3.org/TR/webmidi/
+
+const APP_VERSION = "1.0";
+const CC_ALL_SOUND_OFF = 120;
+const CC_ALL_NOTES_OFF = 123;
+const ERROR_REPEAT_MS = 2000;
+
+// ---------- Types ----------
+
+/** @typedef {{ kind: "none" } | { kind: "any" } | { kind: "channel", channel: number }} InputChannelFilter */
+/** @typedef {{ kind: "none" } | { kind: "channel", channel: number }} OutputChannel */
+
+/** A port identified the way a saved link identifies it: name plus which one of that name (1, 2, ...). */
+class PortRef {
+  /** @param {string} name @param {number} ordinal */
+  constructor(name, ordinal) {
+    /** @type {string} */ this.name = name;
+    /** @type {number} */ this.ordinal = ordinal;
+  }
+  /** @returns {string} */
+  key() { return String(this.ordinal) + ":" + this.name; }
+  /** @param {PortRef} other @returns {boolean} */
+  equals(other) { return this.name === other.name && this.ordinal === other.ordinal; }
+}
+
+/** A connected input port as shown in the table. */
+class ListedInput {
+  /** @param {MIDIInput} port @param {PortRef} ref @param {string} label */
+  constructor(port, ref, label) {
+    /** @type {MIDIInput} */ this.port = port;
+    /** @type {PortRef} */ this.ref = ref;
+    /** @type {string} */ this.label = label;
+  }
+}
+
+/** A connected output port as shown in the table. */
+class ListedOutput {
+  /** @param {MIDIOutput} port @param {PortRef} ref @param {string} label */
+  constructor(port, ref, label) {
+    /** @type {MIDIOutput} */ this.port = port;
+    /** @type {PortRef} */ this.ref = ref;
+    /** @type {string} */ this.label = label;
+  }
+}
+
+/** One table row: what the musician chose for one output port. */
+class RowSetting {
+  /**
+   * @param {PortRef} output
+   * @param {PortRef | null} input
+   * @param {InputChannelFilter} inputFilter
+   * @param {OutputChannel} outputChannel
+   * @param {string} humaneName
+   * @param {string} lastPortId
+   */
+  constructor(output, input, inputFilter, outputChannel, humaneName, lastPortId) {
+    /** @type {PortRef} */ this.output = output;
+    /** @type {PortRef | null} */ this.input = input;
+    /** @type {InputChannelFilter} */ this.inputFilter = inputFilter;
+    /** @type {OutputChannel} */ this.outputChannel = outputChannel;
+    /** @type {string} */ this.humaneName = humaneName;
+    /** @type {string} */ this.lastPortId = lastPortId;
+  }
+  /** @returns {boolean} */
+  isConfigured() {
+    return this.input !== null || this.humaneName !== "" ||
+      this.inputFilter.kind !== "none" || this.outputChannel.kind !== "none";
+  }
+}
+
+/** A live route used per incoming message. Built from RowSettings + connected ports. */
+class Route {
+  /** @param {MIDIOutput} output @param {string} outputLabel @param {InputChannelFilter} inputFilter @param {OutputChannel} outputChannel */
+  constructor(output, outputLabel, inputFilter, outputChannel) {
+    /** @type {MIDIOutput} */ this.output = output;
+    /** @type {string} */ this.outputLabel = outputLabel;
+    /** @type {InputChannelFilter} */ this.inputFilter = inputFilter;
+    /** @type {OutputChannel} */ this.outputChannel = outputChannel;
+  }
+}
+
+/** One entry of the saved-link JSON (field names kept from v0.07 so old bookmarks still load). */
+class SavedRow {
+  /**
+   * @param {string} input_port @param {number} input_port_index @param {string} input_channel
+   * @param {string} output_port @param {number} output_port_index @param {string} output_port_friendly
+   * @param {string} output_device_id @param {string} output_channel
+   */
+  constructor(input_port, input_port_index, input_channel, output_port, output_port_index,
+              output_port_friendly, output_device_id, output_channel) {
+    /** @type {string} */ this.input_port = input_port;
+    /** @type {number} */ this.input_port_index = input_port_index;
+    /** @type {string} */ this.input_channel = input_channel;
+    /** @type {string} */ this.output_port = output_port;
+    /** @type {number} */ this.output_port_index = output_port_index;
+    /** @type {string} */ this.output_port_friendly = output_port_friendly;
+    /** @type {string} */ this.output_device_id = output_device_id;
+    /** @type {string} */ this.output_channel = output_channel;
+  }
+}
+
+/** Throttle bookkeeping for one repeating error. */
+class ErrorRepeat {
+  constructor() {
+    /** @type {number} */ this.lastShownMs = 0;
+    /** @type {number} */ this.suppressed = 0;
+  }
+}
+
+// ---------- State ----------
+
+/** @type {MIDIAccess | null} */ let midiAccess = null;
+/** @type {boolean} */ let routerRunning = false;
+/** @type {boolean} */ let passSystemMessages = false;
+/** @type {RowSetting[]} */ let rowSettings = [];
+/** @type {ListedInput[]} */ let listedInputs = [];
+/** @type {ListedOutput[]} */ let listedOutputs = [];
+/** @type {Map<string, Route[]>} */ let routesByInputId = new Map();
+/** @type {string} */ let portSignature = "";
+/** @type {number} */ let channelMessageCount = 0;
+/** @type {boolean} */ let counterRedrawPending = false;
+/** @type {Map<string, ErrorRepeat>} */ const errorRepeats = new Map();
+
+// ---------- DOM helpers ----------
+
+/** @param {string} id @returns {HTMLElement} */
+function el(id) {
+  const found = document.getElementById(id);
+  if (found === null) throw new Error("Page is missing element #" + id + " (HTML and script out of step).");
+  return found;
+}
+/** @param {string} id @returns {HTMLButtonElement} */
+function button(id) {
+  const found = el(id);
+  if (!(found instanceof HTMLButtonElement)) throw new Error("#" + id + " is not a button.");
+  return found;
+}
+/** @param {string} id @returns {HTMLInputElement} */
+function textInput(id) {
+  const found = el(id);
+  if (!(found instanceof HTMLInputElement)) throw new Error("#" + id + " is not an input.");
+  return found;
+}
+
+/** @param {string} text */
+function notice(text) {
+  el("notice").textContent = text;
+}
+
+// ---------- Error reporting (nothing fails silently) ----------
+
+/** @param {unknown} err @returns {string} */
+function describeError(err) {
+  if (err instanceof Error) {
+    const stack = typeof err.stack === "string" ? err.stack : "(no stack)";
+    return err.name + ": " + err.message + "\n" + stack;
+  }
+  return "Non-Error value thrown: " + String(err);
+}
+
+/**
+ * Show a problem on the page. headline = what to do, in plain words. context = where it happened.
+ * @param {string} headline @param {string} context @param {unknown} err
+ */
+function showError(headline, context, err) {
+  const box = el("errorBox");
+  const list = el("errorList");
+  const item = document.createElement("li");
+  const head = document.createElement("strong");
+  head.textContent = new Date().toLocaleTimeString() + " — " + headline;
+  const detail = document.createElement("pre");
+  detail.textContent = "Where: " + context + "\n" + describeError(err);
+  item.appendChild(head);
+  item.appendChild(detail);
+  list.appendChild(item);
+  box.hidden = false;
+  console.error("[MIDI Router] " + headline + " | " + context, err);
+}
+
+/**
+ * Same as showError but at most once per ERROR_REPEAT_MS per key, so a stream of MIDI can't flood the page.
+ * @param {string} key @param {string} headline @param {string} context @param {unknown} err
+ */
+function showRepeatingError(key, headline, context, err) {
+  const now = Date.now();
+  let rep = errorRepeats.get(key);
+  if (rep === undefined) {
+    rep = new ErrorRepeat();
+    errorRepeats.set(key, rep);
+  }
+  if (now - rep.lastShownMs < ERROR_REPEAT_MS) {
+    rep.suppressed += 1;
+    return;
+  }
+  const extra = rep.suppressed > 0 ? " (" + String(rep.suppressed) + " more like this since last shown)" : "";
+  rep.lastShownMs = now;
+  rep.suppressed = 0;
+  showError(headline + extra, context, err);
+}
+
+/**
+ * Wrap an event handler so any exception is shown with its context.
+ * @param {string} context @param {(ev: Event) => void} fn @returns {(ev: Event) => void}
+ */
+function guarded(context, fn) {
+  return (ev) => {
+    try {
+      fn(ev);
+    } catch (err) {
+      showRepeatingError("handler:" + context, "Program error. Note it, then reload the page.", context, err);
+    }
+  };
+}
+
+/**
+ * Same for async handlers.
+ * @param {string} context @param {(ev: Event) => Promise<void>} fn @returns {(ev: Event) => void}
+ */
+function guardedAsync(context, fn) {
+  return (ev) => {
+    fn(ev).catch((err) => {
+      showRepeatingError("handler:" + context, "Program error. Note it, then reload the page.", context, err);
+    });
+  };
+}
+
+window.addEventListener("error", (ev) => {
+  showError("Program error. Note it, then reload the page.", "uncaught (" + ev.filename + ":" + String(ev.lineno) + ")", ev.error ?? ev.message);
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  showError("Program error. Note it, then reload the page.", "unhandled promise", ev.reason);
+});
+
+// ---------- Channel value encoding (select values and saved links) ----------
+
+/** @param {string} value @returns {InputChannelFilter} */
+function parseInputFilter(value) {
+  if (value === "none") return { kind: "none" };
+  if (value === "any") return { kind: "any" };
+  const ch = parseChannel(value);
+  return { kind: "channel", channel: ch };
+}
+/** @param {string} value @returns {OutputChannel} */
+function parseOutputChannel(value) {
+  if (value === "none") return { kind: "none" };
+  return { kind: "channel", channel: parseChannel(value) };
+}
+/** @param {string} value 0-based channel as text, "0".."15" @returns {number} */
+function parseChannel(value) {
+  if (!/^(?:[0-9]|1[0-5])$/.test(value)) throw new Error('Bad channel value "' + value + '" (expected none, any or 0..15).');
+  return Number(value);
+}
+/** @param {InputChannelFilter} f @returns {string} */
+function inputFilterValue(f) {
+  if (f.kind === "channel") return String(f.channel);
+  return f.kind;
+}
+/** @param {OutputChannel} c @returns {string} */
+function outputChannelValue(c) {
+  if (c.kind === "channel") return String(c.channel);
+  return c.kind;
+}
+
+// ---------- Port listing ----------
+
+/**
+ * Give each port an ordinal among ports of the same name (1, 2, ...) so two identical
+ * devices (e.g. two SQ-1s) can be told apart. Label adds " (2)" only when names repeat.
+ * @param {string[]} names @returns {{ ordinals: number[], labels: string[] }}
+ */
+function ordinalsFor(names) {
+  /** @type {Map<string, number>} */ const totals = new Map();
+  for (const n of names) totals.set(n, (totals.get(n) ?? 0) + 1);
+  /** @type {Map<string, number>} */ const seen = new Map();
+  /** @type {number[]} */ const ordinals = [];
+  /** @type {string[]} */ const labels = [];
+  for (const n of names) {
+    const ord = (seen.get(n) ?? 0) + 1;
+    seen.set(n, ord);
+    ordinals.push(ord);
+    labels.push((totals.get(n) ?? 1) > 1 ? n + " (" + String(ord) + ")" : n);
+  }
+  return { ordinals: ordinals, labels: labels };
+}
+
+/** @param {MIDIAccess} access */
+function listPorts(access) {
+  /** @type {MIDIInput[]} */ const ins = [];
+  access.inputs.forEach((p) => { if (p.state === "connected") ins.push(p); });
+  /** @type {MIDIOutput[]} */ const outs = [];
+  access.outputs.forEach((p) => { if (p.state === "connected") outs.push(p); });
+
+  const inNames = ins.map((p) => p.name ?? "(unnamed input " + p.id + ")");
+  const inOrd = ordinalsFor(inNames);
+  listedInputs = ins.map((p, i) => new ListedInput(p, new PortRef(inNames[i], inOrd.ordinals[i]), inOrd.labels[i]));
+
+  const outNames = outs.map((p) => p.name ?? "(unnamed output " + p.id + ")");
+  const outOrd = ordinalsFor(outNames);
+  listedOutputs = outs.map((p, i) => new ListedOutput(p, new PortRef(outNames[i], outOrd.ordinals[i]), outOrd.labels[i]));
+
+  portSignature = signatureOf(access);
+}
+
+/** @param {MIDIAccess} access @returns {string} */
+function signatureOf(access) {
+  /** @type {string[]} */ const ids = [];
+  access.inputs.forEach((p) => { if (p.state === "connected") ids.push("i:" + p.id); });
+  access.outputs.forEach((p) => { if (p.state === "connected") ids.push("o:" + p.id); });
+  return ids.sort().join("|");
+}
+
+/** @param {PortRef} ref @returns {ListedOutput | null} */
+function findListedOutput(ref) {
+  for (const lo of listedOutputs) if (lo.ref.equals(ref)) return lo;
+  return null;
+}
+/** @param {PortRef} ref @returns {ListedInput | null} */
+function findListedInput(ref) {
+  for (const li of listedInputs) if (li.ref.equals(ref)) return li;
+  return null;
+}
+
+// ---------- Settings <-> table ----------
+
+/** Make sure every connected output has a row; keep configured rows for unplugged outputs. */
+function reconcileRowSettings() {
+  /** @type {RowSetting[]} */ const next = [];
+  for (const lo of listedOutputs) {
+    let found = null;
+    for (const rs of rowSettings) if (rs.output.equals(lo.ref)) { found = rs; break; }
+    if (found === null) {
+      found = new RowSetting(lo.ref, null, { kind: "none" }, { kind: "none" }, "", lo.port.id);
+    }
+    found.lastPortId = lo.port.id;
+    next.push(found);
+  }
+  for (const rs of rowSettings) {
+    if (findListedOutput(rs.output) === null && rs.isConfigured()) next.push(rs);
+  }
+  rowSettings = next;
+}
+
+/**
+ * @param {string} id @param {string} name @param {string} ariaLabel @param {Array<[string, string]>} options value/text pairs
+ * @param {string} selected @returns {HTMLSelectElement}
+ */
+function makeSelect(id, name, ariaLabel, options, selected) {
+  const sel = document.createElement("select");
+  sel.id = id;
+  sel.name = name;
+  sel.setAttribute("aria-label", ariaLabel);
+  for (const [value, text] of options) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = text;
+    sel.appendChild(opt);
+  }
+  sel.value = selected;
+  if (sel.value !== selected) throw new Error('Select #' + id + ' has no option "' + selected + '".');
+  return sel;
+}
+
+/** @returns {Array<[string, string]>} */
+function channelOptions() {
+  /** @type {Array<[string, string]>} */ const opts = [];
+  for (let ch = 0; ch < 16; ch++) opts.push([String(ch), String(ch + 1)]);
+  return opts;
+}
+
+function renderTable() {
+  const body = el("routeTableBody");
+  body.replaceChildren();
+  /** @type {string[]} */ const missingNotes = [];
+
+  rowSettings.forEach((rs, index) => {
+    const lo = findListedOutput(rs.output);
+    const outLabel = lo !== null ? lo.label : rs.output.name + (rs.output.ordinal > 1 ? " (" + String(rs.output.ordinal) + ")" : "");
+    const tr = document.createElement("tr");
+    if (lo === null) {
+      tr.className = "missing";
+      missingNotes.push("output " + outLabel);
+    }
+
+    // Input port
+    /** @type {Array<[string, string]>} */ const inOpts = [["not mapped", "not mapped"]];
+    for (const li of listedInputs) inOpts.push([li.ref.key(), li.label]);
+    let inSelected = "not mapped";
+    if (rs.input !== null) {
+      inSelected = rs.input.key();
+      if (findListedInput(rs.input) === null) {
+        const label = rs.input.name + (rs.input.ordinal > 1 ? " (" + String(rs.input.ordinal) + ")" : "");
+        inOpts.push([inSelected, "⚠ " + label + " — not plugged in"]);
+        missingNotes.push("input " + label);
+      }
+    }
+    const inSel = makeSelect("inPort" + String(index), "inPort" + String(index), "Input port for " + outLabel, inOpts, inSelected);
+    inSel.addEventListener("change", guarded("input port change, row " + outLabel, () => {
+      const v = inSel.value;
+      if (v === "not mapped") {
+        rs.input = null;
+      } else {
+        const colon = v.indexOf(":");
+        if (colon < 1) throw new Error('Bad input option value "' + v + '".');
+        rs.input = new PortRef(v.slice(colon + 1), Number(v.slice(0, colon)));
+      }
+      onRowRoutingChanged(rs);
+    }));
+
+    // Input channel filter
+    /** @type {Array<[string, string]>} */ const fOpts = [["none", "none"], ["any", "any"]];
+    const fSel = makeSelect("inChannel" + String(index), "inChannel" + String(index), "Input channel filter for " + outLabel,
+      fOpts.concat(channelOptions()), inputFilterValue(rs.inputFilter));
+    fSel.addEventListener("change", guarded("input channel change, row " + outLabel, () => {
+      rs.inputFilter = parseInputFilter(fSel.value);
+      onRowRoutingChanged(rs);
+    }));
+
+    // Humane name
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.id = "humaneName" + String(index);
+    nameInput.name = "humaneName" + String(index);
+    nameInput.setAttribute("aria-label", "Humane name for " + outLabel);
+    nameInput.value = rs.humaneName;
+    nameInput.addEventListener("input", guarded("humane name edit, row " + outLabel, () => {
+      rs.humaneName = nameInput.value;
+    }));
+
+    // Output channel
+    /** @type {Array<[string, string]>} */ const oOpts = [["none", "none"]];
+    const oSel = makeSelect("outChannel" + String(index), "outChannel" + String(index), "Output channel for " + outLabel,
+      oOpts.concat(channelOptions()), outputChannelValue(rs.outputChannel));
+    oSel.addEventListener("change", guarded("output channel change, row " + outLabel, () => {
+      rs.outputChannel = parseOutputChannel(oSel.value);
+      onRowRoutingChanged(rs);
+    }));
+
+    const tdIn = document.createElement("td"); tdIn.appendChild(inSel);
+    const tdF = document.createElement("td"); tdF.appendChild(fSel);
+    const tdOut = document.createElement("td"); tdOut.textContent = lo !== null ? outLabel : outLabel + " — not plugged in";
+    const tdName = document.createElement("td"); tdName.appendChild(nameInput);
+    const tdId = document.createElement("td"); tdId.className = "port-id"; tdId.textContent = lo !== null ? lo.port.id : rs.lastPortId;
+    const tdO = document.createElement("td"); tdO.appendChild(oSel);
+    tr.append(tdIn, tdF, tdOut, tdName, tdId, tdO);
+    body.appendChild(tr);
+  });
+
+  const missing = el("missingPorts");
+  if (missingNotes.length > 0) {
+    missing.textContent = "Not plugged in: " + missingNotes.join(", ") + ". Plug in — the map picks it up by itself.";
+    missing.hidden = false;
+  } else {
+    missing.textContent = "";
+    missing.hidden = true;
+  }
+}
+
+/** @param {RowSetting} rs */
+function onRowRoutingChanged(rs) {
+  // Held notes would never get their note-off through the changed route.
+  if (routerRunning) {
+    const lo = findListedOutput(rs.output);
+    if (lo !== null) sendPanic([lo.port], "map change");
+  }
+  rebuildRoutes();
+}
+
+function rebuildRoutes() {
+  /** @type {Map<string, Route[]>} */ const next = new Map();
+  for (const rs of rowSettings) {
+    if (rs.input === null || rs.inputFilter.kind === "none") continue;
+    const lo = findListedOutput(rs.output);
+    const li = findListedInput(rs.input);
+    if (lo === null || li === null) continue;
+    const label = rs.humaneName !== "" ? rs.humaneName + " (" + lo.label + ")" : lo.label;
+    let list = next.get(li.port.id);
+    if (list === undefined) {
+      list = [];
+      next.set(li.port.id, list);
+    }
+    list.push(new Route(lo.port, label, rs.inputFilter, rs.outputChannel));
+  }
+  routesByInputId = next;
+}
+
+/** @returns {MIDIOutput[]} outputs that currently receive from some input */
+function routedOutputs() {
+  /** @type {Set<MIDIOutput>} */ const set = new Set();
+  routesByInputId.forEach((routes) => { for (const r of routes) set.add(r.output); });
+  return Array.from(set);
+}
+
+// ---------- MIDI message handling ----------
+
+/** @param {Route} r @param {number[]} bytes */
+function sendTo(r, bytes) {
+  try {
+    r.output.send(bytes);
+  } catch (err) {
+    showRepeatingError("send:" + r.output.id, 'Can\'t send to "' + r.outputLabel + '". Unplugged? Check cable, or remove it from the map.',
+      "sending " + bytesToHex(bytes), err);
+  }
+}
+
+/** @param {ArrayLike<number>} bytes @returns {string} */
+function bytesToHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+}
+
+/** @param {MIDIInput} input @param {Event} ev */
+function onInputMessage(input, ev) {
+  if (!routerRunning) return;
+  if (!(ev instanceof MIDIMessageEvent)) throw new Error("Input event is not a MIDIMessageEvent.");
+  const data = ev.data;
+  if (data === null || data.length === 0) {
+    showRepeatingError("empty:" + input.id, 'Empty MIDI message from "' + (input.name ?? input.id) + '" ignored.', "input handler", new Error("empty data"));
+    return;
+  }
+  const routes = routesByInputId.get(input.id);
+  if (routes === undefined) return;
+  const status = data[0];
+
+  if (status >= 0x80 && status <= 0xEF) {
+    channelMessageCount += 1;
+    scheduleCounterRedraw();
+    const inChannel = status & 0x0F;
+    const kind = status & 0xF0;
+    for (const r of routes) {
+      const f = r.inputFilter;
+      const passes = f.kind === "any" || (f.kind === "channel" && f.channel === inChannel);
+      if (!passes) continue;
+      if (r.outputChannel.kind === "none") continue;
+      /** @type {number[]} */ const out = Array.from(data);
+      out[0] = kind | r.outputChannel.channel;
+      sendTo(r, out);
+    }
+  } else if (status >= 0xF0) {
+    // System messages: clock, start/stop/continue, SysEx, song position, etc.
+    if (!passSystemMessages) return;
+    /** @type {number[]} */ const sysBytes = Array.from(data);
+    for (const r of routes) sendTo(r, sysBytes);
+  } else {
+    showRepeatingError("status:" + input.id, 'Bad MIDI data from "' + (input.name ?? input.id) + '" ignored.',
+      "input handler, bytes " + bytesToHex(data), new Error("first byte is not a status byte"));
+  }
+}
+
+function scheduleCounterRedraw() {
+  if (counterRedrawPending) return;
+  counterRedrawPending = true;
+  requestAnimationFrame(() => {
+    counterRedrawPending = false;
+    el("counter").textContent = "Channel messages: " + String(channelMessageCount);
+  });
+}
+
+/**
+ * All Sound Off (CC120) + All Notes Off (CC123) on all 16 channels.
+ * @param {MIDIOutput[]} outputs @param {string} reason
+ */
+function sendPanic(outputs, reason) {
+  /** @type {number[]} */ const bytes = [];
+  for (let ch = 0; ch < 16; ch++) {
+    bytes.push(0xB0 | ch, CC_ALL_SOUND_OFF, 0, 0xB0 | ch, CC_ALL_NOTES_OFF, 0);
+  }
+  /** @type {number} */ let sent = 0;
+  for (const out of outputs) {
+    if (out.state !== "connected") continue;
+    try {
+      out.send(bytes);
+      sent += 1;
+    } catch (err) {
+      showRepeatingError("panic:" + out.id, 'Notes-off failed for "' + (out.name ?? out.id) + '". Unplugged?', "panic (" + reason + ")", err);
+    }
+  }
+  notice("Notes off sent to " + String(sent) + " output" + (sent === 1 ? "" : "s") + " (" + reason + ").");
+}
+
+/** @param {MIDIAccess} access */
+function attachInputHandlers(access) {
+  access.inputs.forEach((p) => {
+    if (p.state !== "connected") return;
+    const label = p.name ?? p.id;
+    p.onmidimessage = guarded("MIDI in from " + label, (ev) => onInputMessage(p, ev));
+  });
+}
+
+/** @param {Event} ev */
+function onPortStateChange(ev) {
+  if (midiAccess === null) throw new Error("Port change before MIDI access was granted.");
+  const sig = signatureOf(midiAccess);
+  if (sig === portSignature) return;   // only open/close of a connection, not a plug/unplug
+
+  // Outputs fed by an input that just vanished may have held notes.
+  /** @type {MIDIOutput[]} */ const orphaned = [];
+  /** @type {Set<string>} */ const connectedInputIds = new Set();
+  midiAccess.inputs.forEach((p) => { if (p.state === "connected") connectedInputIds.add(p.id); });
+  routesByInputId.forEach((routes, inputId) => {
+    if (!connectedInputIds.has(inputId)) for (const r of routes) orphaned.push(r.output);
+  });
+
+  listPorts(midiAccess);
+  reconcileRowSettings();
+  renderTable();
+  attachInputHandlers(midiAccess);
+  rebuildRoutes();
+  updateMidiStatus();
+  if (routerRunning && orphaned.length > 0) sendPanic(orphaned, "input unplugged");
+
+  if (ev instanceof MIDIConnectionEvent && ev.port !== null) {
+    const what = ev.port.type === "input" ? "Input" : "Output";
+    notice(what + ' "' + (ev.port.name ?? ev.port.id) + '" ' + (ev.port.state === "connected" ? "plugged in." : "unplugged."));
+  }
+}
+
+// ---------- Saved links ----------
+
+/** @param {unknown} v @param {string} what @returns {string} */
+function requireString(v, what) {
+  if (typeof v !== "string") throw new Error(what + " is missing or not text.");
+  return v;
+}
+/** @param {unknown} v @param {string} what @returns {number} */
+function optionalOrdinal(v, what) {
+  // v0.07 links have no ordinal; they matched the first port of that name, which ordinal 1 reproduces.
+  if (v === undefined) return 1;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) throw new Error(what + " must be a whole number ≥ 1.");
+  return v;
+}
+
+/** @param {string} json @returns {RowSetting[]} */
+function settingsFromSavedJson(json) {
+  /** @type {unknown} */ const parsed = JSON.parse(json);
+  if (typeof parsed !== "object" || parsed === null || !("uriParms" in parsed) || !Array.isArray(parsed.uriParms)) {
+    throw new Error("No uriParms list in saved map.");
+  }
+  /** @type {RowSetting[]} */ const out = [];
+  parsed.uriParms.forEach((/** @type {unknown} */ row, /** @type {number} */ i) => {
+    const where = "row " + String(i + 1);
+    if (typeof row !== "object" || row === null) throw new Error(where + " is not an object.");
+    const r = /** @type {Record<string, unknown>} */ (row);
+    const outName = requireString(r.output_port, where + " output_port");
+    const outRef = new PortRef(outName, optionalOrdinal(r.output_port_index, where + " output_port_index"));
+    const inName = requireString(r.input_port, where + " input_port");
+    const inRef = inName === "not mapped" ? null : new PortRef(inName, optionalOrdinal(r.input_port_index, where + " input_port_index"));
+    const filter = parseInputFilter(requireString(r.input_channel, where + " input_channel"));
+    const outCh = parseOutputChannel(requireString(r.output_channel, where + " output_channel"));
+    const humane = requireString(r.output_port_friendly, where + " output_port_friendly");
+    const devId = requireString(r.output_device_id, where + " output_device_id");
+    out.push(new RowSetting(outRef, inRef, filter, outCh, humane, devId));
+  });
+  return out;
+}
+
+/** @returns {string} */
+function savedJson() {
+  /** @type {SavedRow[]} */ const rows = rowSettings.map((rs) => new SavedRow(
+    rs.input === null ? "not mapped" : rs.input.name,
+    rs.input === null ? 1 : rs.input.ordinal,
+    inputFilterValue(rs.inputFilter),
+    rs.output.name,
+    rs.output.ordinal,
+    rs.humaneName,
+    rs.lastPortId,
+    outputChannelValue(rs.outputChannel)));
+  return JSON.stringify({ version: APP_VERSION, uriParms: rows });
+}
+
+/** @returns {string} page address without query or fragment */
+function pageBaseUrl() {
+  const u = new URL(window.location.href);
+  u.search = "";
+  u.hash = "";
+  return u.toString();
+}
+
+/** Load the map from this page's address (Parm1=...). Returns false if there is none. @returns {boolean} */
+function loadSettingsFromUrl() {
+  const raw = new URL(window.location.href).searchParams.get("Parm1");
+  if (raw === null) return false;
+  try {
+    rowSettings = settingsFromSavedJson(raw);
+  } catch (err) {
+    showError("Saved map in this link is damaged. Map not loaded — set it up again and Save.", "reading Parm1 from address bar", err);
+    return false;
+  }
+  return true;
+}
+
+async function onSave() {
+  const link = pageBaseUrl() + "?Parm1=" + encodeURIComponent(savedJson());
+  const box = textInput("linkBox");
+  box.value = link;
+  el("linkArea").hidden = false;
+
+  /** @type {string[]} */ const done = [];
+  try {
+    window.history.replaceState(null, "", link);
+    done.push("address bar updated — press Ctrl+D to bookmark");
+  } catch (err) {
+    showError("Couldn't update the address bar. Use the link box instead.", "history.replaceState", err);
+  }
+  try {
+    await navigator.clipboard.writeText(link);
+    done.push("link copied");
+  } catch (err) {
+    showError("Copy failed. Click the link box, Ctrl+A, Ctrl+C.", "clipboard write", err);
+  }
+  notice("Saved: " + (done.length > 0 ? done.join("; ") : "see link box") + ".");
+}
+
+function onReload() {
+  if (midiAccess === null) throw new Error("Reload pressed before MIDI access was granted.");
+  if (new URL(window.location.href).searchParams.get("Parm1") === null) {
+    notice("This link has no saved map. Nothing changed.");
+    return;
+  }
+  const before = routedOutputs();
+  if (!loadSettingsFromUrl()) return;   // damaged link: error shown, current map kept
+  if (routerRunning) sendPanic(before, "map reload");
+  reconcileRowSettings();
+  renderTable();
+  rebuildRoutes();
+  notice("Map reloaded from link.");
+}
+
+// ---------- Buttons ----------
+
+function onRouterButton() {
+  if (midiAccess === null) {
+    notice("No MIDI access yet.");
+    return;
+  }
+  const b = button("routerButton");
+  if (!routerRunning) {
+    routerRunning = true;
+    b.textContent = "Router: RUNNING — click to stop";
+    b.className = "btn-run";
+    notice("Router running.");
+  } else {
+    const outs = routedOutputs();
+    routerRunning = false;
+    b.textContent = "Router: OFF — click to start";
+    b.className = "btn-off";
+    sendPanic(outs, "router stopped");
+  }
+}
+
+function onSystemButton() {
+  passSystemMessages = !passSystemMessages;
+  const b = button("systemButton");
+  b.textContent = "System msgs (clock, start/stop, SysEx): " + (passSystemMessages ? "PASSING" : "BLOCKED");
+  b.className = passSystemMessages ? "btn-run" : "btn-off";
+}
+
+function onPanicButton() {
+  if (midiAccess === null) throw new Error("Panic pressed before MIDI access was granted.");
+  /** @type {MIDIOutput[]} */ const all = listedOutputs.map((lo) => lo.port);
+  sendPanic(all, "panic button");
+}
+
+function updateMidiStatus() {
+  el("midiStatus").textContent = "MIDI: ready — " + String(listedInputs.length) + " inputs, " + String(listedOutputs.length) + " outputs.";
+}
+
+// ---------- Start-up ----------
+
+/** @param {MIDIAccess} access */
+function onMidiReady(access) {
+  midiAccess = access;
+  listPorts(access);
+  loadSettingsFromUrl();
+  reconcileRowSettings();
+  renderTable();
+  attachInputHandlers(access);
+  rebuildRoutes();
+  access.onstatechange = guarded("MIDI port plug/unplug", onPortStateChange);
+  updateMidiStatus();
+  for (const id of ["routerButton", "panicButton", "saveButton", "reloadButton"]) button(id).disabled = false;
+}
+
+function start() {
+  button("routerButton").addEventListener("click", guarded("router button", onRouterButton));
+  button("systemButton").addEventListener("click", guarded("system msgs button", onSystemButton));
+  button("panicButton").addEventListener("click", guarded("panic button", onPanicButton));
+  button("saveButton").addEventListener("click", guardedAsync("save button", onSave));
+  button("reloadButton").addEventListener("click", guarded("reload button", onReload));
+  button("clearErrorsButton").addEventListener("click", guarded("clear problems", () => {
+    el("errorList").replaceChildren();
+    el("errorBox").hidden = true;
+  }));
+
+  const status = el("midiStatus");
+  if (!window.isSecureContext) {
+    status.textContent = "MIDI: blocked — open this page from disk (file://), localhost, or https://.";
+    return;
+  }
+  if (typeof navigator.requestMIDIAccess !== "function") {
+    status.textContent = "MIDI: this browser has no Web MIDI. Use Chrome.";
+    return;
+  }
+  status.textContent = "MIDI: waiting for permission…";
+  navigator.requestMIDIAccess({ sysex: true }).then(
+    (access) => {
+      try {
+        onMidiReady(access);
+      } catch (err) {
+        status.textContent = "MIDI: start-up failed — see Problems.";
+        showError("Start-up failed. Note it, then reload the page.", "onMidiReady", err);
+      }
+    },
+    (err) => {
+      status.textContent = "MIDI: access refused.";
+      showError("MIDI access refused. Click the icon left of the address, allow MIDI, then reload.", "requestMIDIAccess", err);
+    });
+}
+
+start();
+</script>
+</body>
+</html>

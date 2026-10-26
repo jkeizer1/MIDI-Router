@@ -1,60 +1,52 @@
 # MIDI-Router
-MIDI Router -
-  ![image](https://user-images.githubusercontent.com/17629970/133940938-1160de31-6f55-4634-9de7-f984f7d90cb2.png)
-  This software enables MIDI Channel/Port mapping in a Web Browser.  You can bookmark several configurations (maps) in your WebMIDI capable browser and quickly start making music versus fussing in your DAW.  My use case is to provide software for a **MIDIPLUS 8x8 USB Midi Box**. <BR>
-<BR>
-SETUP<BR>
--- host the midi router HTML file on some webserver<BR>
--- enable SSL and provide a certificate; WEBMIDI requires SSL.  It still works if you bypass the browser warnings (not recommended)<BR>
--- _update the script with your hostname and script version_****: EXMAPLE: var uriText = "https://yourhost/midirouter7_public.html?" <BR>
--- just search for the var uriText = string to find this line (obvious) <BR>
-<BR>
-USAGE<BR>
--- Example: I use this with MIDIPLUS 8x8 MIDI box which provides no means of mapping ports/channels<BR>
--- Most people would just use their DAW; I find it faster/simpler to just open my browser and click a book mark vs managing MIDI in my DAW <BR>
-<BR>
-A) SETTING UP THE MAP<BR>
--- per the image, 8 input ports, 8 output ports -- this is because my hardware configuration has an 8x8 MIDI USB device <BR>
--- whatever MIDI devices that you have will show up <BR>
--- assign each input port to an output port<BR>
--- assign the Input Channels **[channel#, any, none] to filter channel mesages** that will be sent to the Output Channel<BR>
--- assign the ouput channels<BR>
--- Give each map row a Humane Name so that you do not have to remember which device is using what port/channel combination<BR>
-<BR>
-B) SAVING THE MAP<BR>
--- press the "SAVE URI to clipboard" button (this simply creates a URI string with the parameters of the map table set, and copies it to the clipboard)<BR>
--- paste this into your browser, and save a bookmark<BR>
-<BR>
-C) USING A PREVIOUS MAP<BR>
--- click the bookmark; the program will load the table from the URI parameters<BR>
-<BR>
-D) REFRESHING A MAP THAT YOU HAVE CHANGED<BR>
--- click the book mark again or click the "Load template from URI" button<BR>
--- rarely have I actually used this button, will probably delete it in the future <BR>
-<BR>
-E) STARTING THE ROUTER/STOPPING THE ROUTER<BR>
--- the router is either on or off, use the "Router Status" button to start/stop the router<BR>
--- all notes off messages are sent to all the devices when the router is stopped<BR>
-<BR>
-F) REAL TIME START MESSAGES<BR>
--- this feature disables/enables sending MIDI Real Time Start Messages<BR>
--- if enabled, your devices may start their own sequencers; this button allows you to disable this behaviour<BR>
--- for example, prevent a set of Volcas from always starting their sequencers<BR>
-<BR>
-G) CODE NOTES<BR>
--- this is a home project, and has not been hardened for Security at all<BR> 
--- the javascript is probably not up to best practices as it was only my second or third'ish java script, it could easily be improved and cleaned up in several obvious ways; maybe later :)<BR>
--- this is my first WebMIDI project; use at own risk. The script has worked for my purposes; your milage may vary<BR>
-<BR>
-H) SOME MIDI BACKGROUND<BR>	
-https://www.cs.cmu.edu/~music/cmsip/readings/MIDI%20tutorial%20for%20programmers.html <BR>
-https://www.songstuff.com/recording/article/midi_message_format/ <BR>
-https://www.w3.org/TR/webmidi/#idl-def-MIDIPort <BR>
-<BR>
-I) SECURITY<BR>
--- Per (G), this is a home project.  Other than enabling SSL, I have NOT considered security aspects, for example effects of people hacking the URI string<BR>
--- Decide for yourself if this seems insecure and improve it if you need to; I make no representation that the code / solution is secure in any way; use at your own risk<BR>
-<BR>
-J) LIVE PERFORMANCES<BR>
--- I use this only to create music for hobby purposes; so far it has worked really well.  But I am not certain I would use this in front of an audience live; probably the biggest issue might be stuck notes; I have not encountered this issue too frequently and have not included a all notes off button although it does send notes off messages (0x7B) everywhere when the router stop button is pressed <BR>
-END<BR>
+
+![image](https://user-images.githubusercontent.com/17629970/133940938-1160de31-6f55-4634-9de7-f984f7d90cb2.png)
+
+A MIDI port/channel router that runs in a web browser (Web MIDI). Bookmark several maps and switch between them in a click instead of fussing in a DAW. Written for a **MIDIPLUS 8x8 USB MIDI box**, which has no routing of its own. One HTML file, no libraries.
+
+## Setup
+- Use Chrome (tested). Other browsers untested.
+- Web MIDI needs a secure page: open the file straight from disk (`file://`), from `localhost`, or from an `https://` server.
+- Allow MIDI (including SysEx) when the browser asks.
+
+## Using it
+**Map.** One row per output port. For each row choose:
+- *Input Port* — the input that feeds this output (one input can feed many outputs).
+- *Input Channel Filter* — `none` (row off), `any`, or one channel.
+- *Output Channel* — channel messages are re-sent on this channel; `none` blocks channel messages.
+- *Humane Name* — your label, e.g. "Volca Keys".
+
+Two devices with the same name (e.g. two Korg SQ-1s) show as `SQ-1 (1)` and `SQ-1 (2)`, numbered in the order the browser lists them. If one is unplugged, the other becomes `(1)`, so re-check those rows after re-plugging.
+
+**Save.** *Save map as link* copies a link to the clipboard and puts it in the address bar — press Ctrl+D to bookmark. Open the bookmark to get that map back.
+
+**v0.07 bookmarks** still load: edit the bookmark and change `midirouter7_public.html` to `midirouter.html`; keep everything from `?Parm1=` on.
+
+**Router on/off.** Stopping the router sends All Sound Off + All Notes Off (CC120, CC123, all 16 channels) to every output in use.
+
+**PANIC** sends the same to every connected output, router on or off.
+
+**System msgs** — BLOCKED by default. PASSING forwards clock, start/stop/continue, song position and SysEx from each input to all its outputs (unchanged; output channel doesn't apply). Use BLOCKED to stop sequencers such as Volcas starting by themselves.
+
+**Plugging and unplugging** is picked up live. A row whose device is missing shows "not plugged in" and starts routing again when it comes back. If an input is unplugged while running, its outputs get notes-off.
+
+**Problems** appear in a red box at the top with what to do and the technical detail. Nothing fails silently.
+
+## Notes
+- Hobby project; not hardened for security. The saved map lives in the link's `Parm1` parameter and is validated on load.
+- One input per output: two inputs can't yet be merged into one output. Multi-input routes are planned.
+- No note tracking: a changed row or stopped router relies on CC120/CC123, which nearly all synths honour.
+
+## MIDI background
+- https://www.cs.cmu.edu/~music/cmsip/readings/MIDI%20tutorial%20for%20programmers.html
+- https://www.w3.org/TR/webmidi/
+
+## Changes in v1.0 (from v0.07)
+- Fixed: Chrome "form field should have an id or name" issues (one per table control).
+- Fixed: "all notes off" on stop never worked — it re-sent the last incoming message instead, and only when the next message arrived. Now sends real CC120/CC123 at once.
+- Fixed: each row had a stray 7th cell; malformed `</>` tags; invalid CSS.
+- Fixed: a damaged link or a send to an unplugged device failed silently (console only).
+- Fixed: Humane Names containing `?` broke loading.
+- Fixed: "Real Time Start" toggle actually gated all system messages; now labelled as such.
+- Fixed: Save link no longer needs the host name edited into the script.
+- New: PANIC button, hot-plug, duplicate-name ports, notes-off on map change while running, strict mode with type-checked JSDoc, faster per-message routing (no table reads per message).
