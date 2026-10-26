@@ -4,6 +4,8 @@
 
 A MIDI port/channel router that runs in a web browser (Web MIDI). Bookmark several maps and switch between them in a click instead of fussing in a DAW. Written for a **MIDIPLUS 8x8 USB MIDI box**, which has no routing of its own. One HTML file, no libraries.
 
+**Credits:** original concept and source (v0.07) by Jim Keizer; v1.0 program written by Claude.ai.
+
 ## Setup
 - Use Chrome (tested). Other browsers untested.
 - Web MIDI needs a secure page: open the file straight from disk (`file://`), from `localhost`, or from an `https://` server.
