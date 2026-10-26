@@ -20,8 +20,6 @@ Two devices with the same name (e.g. two Korg SQ-1s) show as `SQ-1 (1)` and `SQ-
 
 **Save.** *Save map as link* copies a link to the clipboard and puts it in the address bar — press Ctrl+D to bookmark. Open the bookmark to get that map back.
 
-**v0.07 bookmarks** still load: edit the bookmark and change `midirouter7_public.html` to `midirouter.html`; keep everything from `?Parm1=` on.
-
 **Router on/off.** Stopping the router sends All Sound Off + All Notes Off (CC120, CC123, all 16 channels) to every output in use.
 
 **PANIC** sends the same to every connected output, router on or off.
